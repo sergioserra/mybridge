@@ -27,7 +27,7 @@ class BridgeDelegate {
 
     private static final String TAG = BridgeDelegate.class.getName();
 
-    private static final String KEY_BUNDLE = "bundle_%s";
+    private static final String KEY_BUNDLE = "%s_bundle_%s";
     private static final String KEY_UUID = "uuid_%s";
 
     private boolean mIsClearAllowed = false;
@@ -54,7 +54,7 @@ class BridgeDelegate {
         if (uuid == null) {
             return;
         }
-        clearDataForUuid(uuid);
+        clearDataForUuid(target, uuid);
     }
 
     void clearAll() {
@@ -65,19 +65,19 @@ class BridgeDelegate {
                 .commit();
     }
 
-    private void clearDataForUuid(@NonNull String uuid) {
+    private void clearDataForUuid(@NonNull Object target, @NonNull String uuid) {
         mUuidBundleMap.remove(uuid);
-        enqueue(() -> clearDataFromDisk(uuid));
+        enqueue(() -> clearDataFromDisk(target, uuid));
     }
 
-    private void clearDataFromDisk(@NonNull String uuid) {
+    private void clearDataFromDisk(@NonNull Object target, @NonNull String uuid) {
         mSharedPreferences.edit()
-                .remove(getKeyForEncodedBundle(uuid))
+                .remove(getKeyForEncodedBundle(target, uuid))
                 .commit();
     }
 
-    private String getKeyForEncodedBundle(@NonNull String uuid) {
-        return String.format(KEY_BUNDLE, uuid);
+    private String getKeyForEncodedBundle(@NonNull Object target, @NonNull String uuid) {
+        return String.format(KEY_BUNDLE, target.getClass().getSimpleName(), uuid);
     }
 
     private String getKeyForUuid(@NonNull Object target) {
@@ -85,7 +85,7 @@ class BridgeDelegate {
     }
 
     @Nullable
-    private Bundle readFromDisk(@NonNull String uuid) {
+    private Bundle readFromDisk(@NonNull Object target, @NonNull String uuid) {
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "readFromDisk() called with: uuid = [" + uuid + "]");
         }
@@ -93,7 +93,7 @@ class BridgeDelegate {
         Parcel parcel = Parcel.obtain();
 
         try {
-            encodedString = mSharedPreferences.getString(getKeyForEncodedBundle(uuid), null);
+            encodedString = mSharedPreferences.getString(getKeyForEncodedBundle(target, uuid), null);
             if (encodedString == null) {
                 return null;
             }
@@ -161,14 +161,14 @@ class BridgeDelegate {
         mObjectUuidMap.put(target, uuid);
         Bundle bundle = mUuidBundleMap.containsKey(uuid)
                 ? mUuidBundleMap.get(uuid)
-                : readFromDisk(uuid);
+                : readFromDisk(target, uuid);
 
         if (bundle == null) {
             return;
         }
         WrapperUtils.unwrapOptimizedObjects(bundle);
         mSavedStateHandler.restoreInstanceState(target, bundle);
-        clearDataForUuid(uuid);
+        clearDataForUuid(target, uuid);
     }
 
     void saveInstanceState(@NonNull Object target, @NonNull Bundle state) {
@@ -191,10 +191,11 @@ class BridgeDelegate {
         mUuidBundleMap.put(uuid, bundle);
 
         final String finalUuid = uuid;
-        enqueue(() -> writeToDisk(finalUuid, bundle));
+        enqueue(() -> writeToDisk(target, finalUuid, bundle));
     }
 
-    private void writeToDisk(@NonNull String uuid,
+    private void writeToDisk(@NonNull Object target,
+                             @NonNull String uuid,
                              @NonNull Bundle bundle) {
         Parcel parcel = Parcel.obtain();
         parcel.writeBundle(bundle);
@@ -202,7 +203,7 @@ class BridgeDelegate {
         try {
             encodedString = Base64.encodeToString(parcel.marshall(), 0);
             mSharedPreferences.edit()
-                    .putString(getKeyForEncodedBundle(uuid), encodedString)
+                    .putString(getKeyForEncodedBundle(target, uuid), encodedString)
                     .commit();
 
             if (BuildConfig.DEBUG) {
